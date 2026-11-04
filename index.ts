@@ -39,7 +39,6 @@ async function handleGroup(event: GroupMessageEvent) {
 }
 
 bot.on("message.group", handleGroup);
-bot.on("message.group.at", handleGroup);
 
 bot.on("message.private", async (event) => {
   try {
