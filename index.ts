@@ -1,4 +1,5 @@
 import { Bot, ReceiverMode } from "qq-official-bot";
+import type { GroupMessageEvent } from "qq-official-bot";
 import { agent, extractText } from "./agent";
 
 const appid = Bun.env.APP_ID;
@@ -28,14 +29,17 @@ async function respond(text: string): Promise<string> {
   return extractText(result) || "我没想好怎么回复。";
 }
 
-bot.on("message.group", async (event) => {
+async function handleGroup(event: GroupMessageEvent) {
   try {
     await event.reply(await respond(event.raw_message));
   } catch (err) {
     console.error("处理群消息失败:", err);
     await event.reply("抱歉，我这边出错了，请稍后再试。");
   }
-});
+}
+
+bot.on("message.group", handleGroup);
+bot.on("message.group.at", handleGroup);
 
 bot.on("message.private", async (event) => {
   try {
