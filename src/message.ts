@@ -17,7 +17,10 @@ const PLACEHOLDERS: Record<string, string> = {
 const MAX_IMAGES = 4;
 
 export interface Mention {
+  /** 用户 openid */
   id: string;
+  /** 群成员 openid，全量消息里 @ 用的是这个 */
+  memberId?: string;
   name: string;
 }
 
@@ -48,15 +51,20 @@ function parseAttrs(raw: string | undefined): Record<string, string> {
  * raw_message 里图片、表情、引用都是 <image,url=...> 这样的标签，直接喂给模型会很怪。
  */
 export function parseRawMessage(raw: string, mentions: readonly Mention[] = []): ParsedMessage {
+  // 全量模式下 @ 是 <@member_openid> / <@all> 这种 Python 风味写法，先统一成 <at,...>
+  const normalized = raw
+    .replace(/<@all>/gi, "<at,user_id=all>")
+    .replace(/<@!?([A-Za-z0-9_-]+)>/g, "<at,user_id=$1>");
+
   const images: string[] = [];
   let quoteId: string | undefined;
   let text = "";
   let cursor = 0;
 
-  for (const match of raw.matchAll(TAG_PATTERN)) {
+  for (const match of normalized.matchAll(TAG_PATTERN)) {
     const [full, rawType = "", rawAttrs] = match;
     const index = match.index ?? 0;
-    text += raw.slice(cursor, index);
+    text += normalized.slice(cursor, index);
     cursor = index + full.length;
 
     const type = rawType.toLowerCase();
@@ -72,7 +80,9 @@ export function parseRawMessage(raw: string, mentions: readonly Mention[] = []):
       if (userId === "all") {
         text += "@全体成员";
       } else {
-        const name = mentions.find((mention) => mention.id === userId)?.name;
+        const name = mentions.find(
+          (mention) => mention.id === userId || mention.memberId === userId,
+        )?.name;
         text += `@${name ?? "某人"}`;
       }
       continue;
@@ -94,7 +104,7 @@ export function parseRawMessage(raw: string, mentions: readonly Mention[] = []):
     text += full;
   }
 
-  text += raw.slice(cursor);
+  text += normalized.slice(cursor);
   text = text.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 
   return { text, images, quoteId };

@@ -74,6 +74,7 @@ function handleGroup(event: GroupMessageEvent): void {
     raw: event.raw_message,
     mentions: mentions.map((mention) => ({
       id: mention.id,
+      memberId: mention.member_openid,
       name: mention.username,
     })),
     addressed,

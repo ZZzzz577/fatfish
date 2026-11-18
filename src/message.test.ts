@@ -34,6 +34,15 @@ describe("parseRawMessage", () => {
     expect(parsed.text).toBe("前<weird,id=1>后");
     expect(parsed.images).toEqual([]);
   });
+
+  test("全量模式的 <@成员> 写法也能还原", () => {
+    const parsed = parseRawMessage("<@A1B2> 你看 <@all> 和 <@!C3D4>", [
+      { id: "u1", memberId: "A1B2", name: "小明" },
+      { id: "C3D4", memberId: "C3D4", name: "小红" },
+    ]);
+
+    expect(parsed.text).toBe("@小明 你看 @全体成员 和 @小红");
+  });
 });
 
 describe("findWakeWord", () => {
