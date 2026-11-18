@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { cleanReply, findWakeWord, parseRawMessage, splitReply, stripWakeWords } from "./message";
+import {
+  cleanReply,
+  extractQuotedContent,
+  findWakeWord,
+  parseRawMessage,
+  splitReply,
+  stripWakeWords,
+} from "./message";
 
 describe("parseRawMessage", () => {
   test("把图片、表情、引用拆成可读内容", () => {
@@ -101,5 +108,40 @@ describe("splitReply", () => {
 
     expect(chunks.length).toBe(4);
     expect(chunks.at(-1)?.endsWith("…")).toBe(true);
+  });
+});
+
+describe("extractQuotedContent", () => {
+  test("取出引用的文字和图片", () => {
+    const quoted = extractQuotedContent([
+      {
+        content: "<@A1B2> 看这个",
+        attachments: [{ content_type: "image/png", url: "https://example.com/q.png" }],
+      },
+    ]);
+
+    expect(quoted?.text).toBe("@某人 看这个");
+    expect(quoted?.images).toEqual(["https://example.com/q.png"]);
+  });
+
+  test("引用的文件保留文件名，语音转成占位", () => {
+    const quoted = extractQuotedContent([
+      {
+        content: "",
+        attachments: [
+          { content_type: "application/zip", url: "https://example.com/a.zip", filename: "报表.zip" },
+          { content_type: "voice", url: "https://example.com/a.silk" },
+        ],
+      },
+    ]);
+
+    expect(quoted?.text).toBe("【文件】报表.zip\n【语音】");
+    expect(quoted?.images).toEqual([]);
+  });
+
+  test("没有内容时返回 undefined", () => {
+    expect(extractQuotedContent([])).toBeUndefined();
+    expect(extractQuotedContent(undefined)).toBeUndefined();
+    expect(extractQuotedContent([{ content: "  " }])).toBeUndefined();
   });
 });

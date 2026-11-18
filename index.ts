@@ -7,6 +7,7 @@ import type {
 import { generateReply } from "./src/agent";
 import { createChatHandler } from "./src/chat";
 import { ConversationStore } from "./src/context";
+import { extractQuotedContent } from "./src/message";
 
 const appid = Bun.env.APP_ID;
 const secret = Bun.env.APP_SECRET;
@@ -61,6 +62,16 @@ const bot = new Bot({
   intents: ["GROUP_AND_C2C_EVENT", "PUBLIC_GUILD_MESSAGES"],
 });
 
+/**
+ * 引用回复时平台会把被引用的消息放在 msg_elements 里，
+ * SDK 没有解析这个字段，这里从原始 payload 取出来。
+ */
+function quotedOf(event: GroupMessageEvent | PrivateMessageEvent | GuildMessageEvent) {
+  const payload = event as unknown as { message_type?: unknown; msg_elements?: unknown };
+  if (Number(payload.message_type ?? 0) !== 103) return undefined;
+  return extractQuotedContent(payload.msg_elements);
+}
+
 function handleGroup(event: GroupMessageEvent): void {
   const mentions = event.mentions ?? [];
   const addressed = event.sub_type === "at" || mentions.some((mention) => mention.is_you);
@@ -78,6 +89,7 @@ function handleGroup(event: GroupMessageEvent): void {
       name: mention.username,
     })),
     addressed,
+    quoted: quotedOf(event),
     reply: (text) => event.reply(text),
   });
 }
@@ -92,6 +104,7 @@ function handlePrivate(event: PrivateMessageEvent): void {
     raw: event.raw_message,
     mentions: [],
     addressed: true,
+    quoted: quotedOf(event),
     reply: (text) => event.reply(text),
   });
 }
@@ -110,6 +123,7 @@ function handleGuild(event: GuildMessageEvent): void {
     raw: event.raw_message,
     mentions: [],
     addressed: true,
+    quoted: quotedOf(event),
     reply: (text) => event.reply(text),
   });
 }

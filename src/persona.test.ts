@@ -24,11 +24,8 @@ describe("buildChatPrompt", () => {
         },
       ],
       quote: {
-        id: "m0",
-        userId: "u2",
         userName: "小王",
         text: "这鱼是不是胖了",
-        timestamp: Date.now() - 120_000,
         self: false,
       },
       sender: "小王",

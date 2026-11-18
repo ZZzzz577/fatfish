@@ -33,10 +33,17 @@ export interface ChatScene {
   channelName?: string;
 }
 
+export interface QuotedMessage {
+  text: string;
+  userName?: string;
+  self?: boolean;
+}
+
 export interface ChatPromptInput {
   scene: ChatScene;
   transcript: readonly StoredMessage[];
-  quote?: StoredMessage;
+  quote?: QuotedMessage;
+  quotedImages?: number;
   sender: string;
   text: string;
   imageCount: number;
@@ -109,7 +116,19 @@ export function buildChatPrompt(input: ChatPromptInput): string {
     lines.push("【被引用的消息】", `${who}：${input.quote.text}`);
   }
 
-  const current = input.text.trim() || (input.imageCount > 0 ? "（只发了一张图，没说话）" : "（空消息）");
+  if (input.quotedImages && input.quotedImages > 0) {
+    lines.push(
+      `【引用的图片】被引用的消息里有 ${input.quotedImages} 张图，跟在当前消息的图片后面一起给你了。`,
+    );
+  }
+
+  const current =
+    input.text.trim() ||
+    (input.imageCount > 0
+      ? "（只发了一张图，没说话）"
+      : input.quote
+        ? "（只引用了消息，没说话）"
+        : "（空消息）");
   lines.push(`【当前消息】${input.sender}：${current}`);
 
   if (input.imageCount > 0) {

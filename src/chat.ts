@@ -6,7 +6,7 @@ import {
   splitReply,
   stripWakeWords,
 } from "./message";
-import type { Mention } from "./message";
+import type { Mention, QuotedContent } from "./message";
 import { buildChatPrompt } from "./persona";
 import type { ChatScene } from "./persona";
 
@@ -26,6 +26,8 @@ export interface IncomingMessage {
   mentions: readonly Mention[];
   /** 这条消息是否直接叫到了它（@、引用它的话） */
   addressed: boolean;
+  /** 平台随消息推过来的被引用内容（message_type=103 时） */
+  quoted?: QuotedContent;
   reply: (text: string) => Promise<unknown>;
 }
 
@@ -84,11 +86,14 @@ export function createChatHandler(options: ChatHandlerOptions) {
 
     const parsed = parseRawMessage(incoming.raw, incoming.mentions);
     const text = parsed.text.trim();
-    const quote = parsed.quoteId ? history.find(incoming.key, parsed.quoteId) : undefined;
+    const storedQuote = parsed.quoteId ? history.find(incoming.key, parsed.quoteId) : undefined;
+    const quotedImages = incoming.quoted?.images ?? [];
+    const quote =
+      storedQuote ?? (incoming.quoted?.text ? { text: incoming.quoted.text } : undefined);
     const transcript = [...history.recent(incoming.key)];
 
     const wakeWord = findWakeWord(text, wakeWords);
-    const quotedBot = quote?.self === true;
+    const quotedBot = storedQuote?.self === true;
     const shouldReply = incoming.addressed || quotedBot || wakeWord !== undefined;
     const trigger: "at" | "name" | "quote" = quotedBot
       ? "quote"
@@ -110,7 +115,13 @@ export function createChatHandler(options: ChatHandlerOptions) {
     }
 
     // 纯空消息（比如只 @ 了一下）给个回应，别装死
-    if (!text && parsed.images.length === 0 && !parsed.quoteId) {
+    if (
+      !text &&
+      parsed.images.length === 0 &&
+      !parsed.quoteId &&
+      !incoming.quoted?.text &&
+      quotedImages.length === 0
+    ) {
       if (shouldReply) await safeReply(incoming, "咕噜？叫我干嘛。");
       return;
     }
@@ -132,6 +143,7 @@ export function createChatHandler(options: ChatHandlerOptions) {
       scene: incoming.scene,
       transcript,
       quote,
+      quotedImages: quotedImages.length,
       sender: incoming.userName || "群友",
       text,
       imageCount: parsed.images.length,
@@ -139,9 +151,12 @@ export function createChatHandler(options: ChatHandlerOptions) {
       trigger,
     });
 
+    // 当前消息的图在前，引用消息的图在后，总共不超过 4 张
+    const images = [...parsed.images, ...quotedImages].slice(0, 4);
+
     let answer: string;
     try {
-      answer = cleanReply(await generate({ prompt, images: parsed.images })) || fallback();
+      answer = cleanReply(await generate({ prompt, images })) || fallback();
     } catch (err) {
       console.error("生成回复失败:", err);
       answer = fallback();

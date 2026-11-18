@@ -110,6 +110,57 @@ export function parseRawMessage(raw: string, mentions: readonly Mention[] = []):
   return { text, images, quoteId };
 }
 
+const MAX_QUOTED_CHARS = 800;
+
+export interface QuotedContent {
+  text: string;
+  images: string[];
+}
+
+/**
+ * 引用回复时平台会把被引用的消息塞进 msg_elements，
+ * 这里取出文字和图片，供模型理解“他引用的到底是什么”。
+ */
+export function extractQuotedContent(elements: unknown): QuotedContent | undefined {
+  if (!Array.isArray(elements)) return undefined;
+
+  const parts: string[] = [];
+  const images: string[] = [];
+
+  for (const element of elements) {
+    if (!element || typeof element !== "object") continue;
+
+    const content = (element as { content?: unknown }).content;
+    if (typeof content === "string" && content.trim()) {
+      parts.push(parseRawMessage(content).text);
+    }
+
+    const attachments = (element as { attachments?: unknown }).attachments;
+    if (!Array.isArray(attachments)) continue;
+
+    for (const attachment of attachments) {
+      if (!attachment || typeof attachment !== "object") continue;
+      const url = (attachment as { url?: unknown }).url;
+      const type = String((attachment as { content_type?: unknown }).content_type ?? "");
+      const filename = String((attachment as { filename?: unknown }).filename ?? "");
+
+      if (typeof url === "string" && /^https?:\/\//i.test(url) && type.startsWith("image/")) {
+        if (images.length < MAX_IMAGES && !images.includes(url)) images.push(url);
+      } else if (filename) {
+        parts.push(`【文件】${filename}`);
+      } else if (type === "voice") {
+        parts.push("【语音】");
+      } else if (type.startsWith("video/")) {
+        parts.push("【视频】");
+      }
+    }
+  }
+
+  const text = parts.join("\n").trim().slice(0, MAX_QUOTED_CHARS);
+  if (!text && images.length === 0) return undefined;
+  return { text, images };
+}
+
 /** 把模型输出整理成适合 QQ 发送的纯文本 */
 export function cleanReply(input: string): string {
   return input

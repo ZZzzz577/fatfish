@@ -7,11 +7,13 @@ function setup() {
   const history = new ConversationStore(20);
   const replies: string[] = [];
   const prompts: string[] = [];
+  const imagesSeen: string[][] = [];
 
   const chat = createChatHandler({
     history,
-    generate: async ({ prompt }) => {
+    generate: async ({ prompt, images }) => {
       prompts.push(prompt);
+      imagesSeen.push([...images]);
       return "在的，刚摆了下尾巴。";
     },
     wakeWords: ["大肥鱼", "肥鱼"],
@@ -41,7 +43,7 @@ function setup() {
     };
   }
 
-  return { chat, history, replies, prompts, incoming };
+  return { chat, history, replies, prompts, imagesSeen, incoming };
 }
 
 describe("createChatHandler", () => {
@@ -70,6 +72,32 @@ describe("createChatHandler", () => {
 
     expect(replies).toEqual(["在的，刚摆了下尾巴。"]);
     expect(prompts[0] ?? "").toContain("【触发方式】对方没有 @ 你");
+  });
+
+  test("引用消息的内容会带进提示词", async () => {
+    const { chat, prompts, incoming } = setup();
+
+    await chat.handle(
+      incoming("这个咋说", {
+        addressed: true,
+        quoted: { text: "被引用的原话", images: [] },
+      }),
+    );
+
+    expect(prompts[0] ?? "").toContain("被引用的原话");
+  });
+
+  test("引用消息里的图片也会给模型", async () => {
+    const { chat, imagesSeen, incoming } = setup();
+
+    await chat.handle(
+      incoming("看这张", {
+        addressed: true,
+        quoted: { text: "", images: ["https://example.com/q.png"] },
+      }),
+    );
+
+    expect(imagesSeen[0]).toEqual(["https://example.com/q.png"]);
   });
 
   test("引用了机器人的话也会接", async () => {
