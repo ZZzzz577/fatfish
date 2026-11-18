@@ -70,4 +70,18 @@ describe("buildChatPrompt", () => {
 
     expect(prompt).toContain("本次消息带了 2 张图");
   });
+
+  test("被提到名字时给出触发说明", () => {
+    const prompt = buildChatPrompt({
+      scene: { kind: "group", name: "群" },
+      transcript: [],
+      sender: "小李",
+      text: "大肥鱼你觉得呢",
+      imageCount: 0,
+      timezone: "Asia/Shanghai",
+      trigger: "name",
+    });
+
+    expect(prompt).toContain("【触发方式】对方没有 @ 你");
+  });
 });

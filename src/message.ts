@@ -116,6 +116,30 @@ export function cleanReply(input: string): string {
     .trim();
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 消息里有没有叫到它的名字，返回命中的那个词 */
+export function findWakeWord(text: string, words: readonly string[]): string | undefined {
+  const haystack = text.toLowerCase();
+  return words.find((word) => word.length > 0 && haystack.includes(word.toLowerCase()));
+}
+
+/** 去掉消息里的称呼，方便识别“大肥鱼，重置对话”这类指令 */
+export function stripWakeWords(text: string, words: readonly string[]): string {
+  const valid = [...words]
+    .filter((word) => word.length > 0)
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  if (valid.length === 0) return text.trim();
+  const pattern = new RegExp(valid.join("|"), "gi");
+  return text
+    .replace(pattern, "")
+    .replace(/^[\s,，.。!！?？:：、~～-]+/, "")
+    .trim();
+}
+
 const MAX_CHUNKS = 4;
 
 /** QQ 单条消息有长度上限，超长内容按句号/换行切开，最多发 4 条 */

@@ -41,6 +41,8 @@ export interface ChatPromptInput {
   text: string;
   imageCount: number;
   timezone?: string;
+  /** 这条消息是怎么叫到你的：@、被提到名字、还是引用了你的话 */
+  trigger?: "at" | "name" | "quote";
 }
 
 function formatTime(date: Date, timezone: string): string {
@@ -112,6 +114,14 @@ export function buildChatPrompt(input: ChatPromptInput): string {
 
   if (input.imageCount > 0) {
     lines.push(`【附带图片】本次消息带了 ${input.imageCount} 张图，可以直接看图说话。`);
+  }
+
+  if (input.trigger === "name") {
+    lines.push(
+      "【触发方式】对方没有 @ 你，只是在聊天里提到了你的名字。顺着他们的话题自然接一句就行，别问“你叫我？”。如果他们不是在跟你说话，轻轻搭个腔就好。",
+    );
+  } else if (input.trigger === "quote") {
+    lines.push("【触发方式】对方引用了你说过的话，接着上面的话题回。");
   }
 
   lines.push(

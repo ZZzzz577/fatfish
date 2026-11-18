@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cleanReply, parseRawMessage, splitReply } from "./message";
+import { cleanReply, findWakeWord, parseRawMessage, splitReply, stripWakeWords } from "./message";
 
 describe("parseRawMessage", () => {
   test("把图片、表情、引用拆成可读内容", () => {
@@ -33,6 +33,32 @@ describe("parseRawMessage", () => {
 
     expect(parsed.text).toBe("前<weird,id=1>后");
     expect(parsed.images).toEqual([]);
+  });
+});
+
+describe("findWakeWord", () => {
+  test("提到名字就命中", () => {
+    expect(findWakeWord("大肥鱼你觉得呢", ["大肥鱼", "肥鱼"])).toBe("大肥鱼");
+    expect(findWakeWord("问下肥鱼", ["大肥鱼", "肥鱼"])).toBe("肥鱼");
+  });
+
+  test("没提名字不命中", () => {
+    expect(findWakeWord("今天吃鱼", ["大肥鱼", "肥鱼"])).toBeUndefined();
+  });
+
+  test("英文不分大小写", () => {
+    expect(findWakeWord("FatFish 在吗", ["fatfish"])).toBe("fatfish");
+  });
+});
+
+describe("stripWakeWords", () => {
+  test("去掉称呼和标点，方便识别指令", () => {
+    expect(stripWakeWords("大肥鱼，重置对话", ["大肥鱼", "肥鱼"])).toBe("重置对话");
+    expect(stripWakeWords("肥鱼 帮助", ["大肥鱼", "肥鱼"])).toBe("帮助");
+  });
+
+  test("没有称呼时原样返回", () => {
+    expect(stripWakeWords("  在吗  ", ["大肥鱼"])).toBe("在吗");
   });
 });
 
