@@ -68,6 +68,21 @@ describe("buildChatPrompt", () => {
     expect(prompt).toContain("本次消息带了 2 张图");
   });
 
+  test("列出本条消息 @ 了谁", () => {
+    const prompt = buildChatPrompt({
+      scene: { kind: "group", name: "群" },
+      transcript: [],
+      sender: "小李",
+      text: "你看看",
+      imageCount: 0,
+      mentioned: ["小明", "小红"],
+      timezone: "Asia/Shanghai",
+      trigger: "at",
+    });
+
+    expect(prompt).toContain("【本条消息 @ 了】小明、小红");
+  });
+
   test("被提到名字时给出触发说明", () => {
     const prompt = buildChatPrompt({
       scene: { kind: "group", name: "群" },

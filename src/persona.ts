@@ -47,6 +47,8 @@ export interface ChatPromptInput {
   sender: string;
   text: string;
   imageCount: number;
+  /** 这条消息里 @ 了谁（不含机器人自己） */
+  mentioned?: readonly string[];
   timezone?: string;
   /** 这条消息是怎么叫到你的：@、被提到名字、还是引用了你的话 */
   trigger?: "at" | "name" | "quote";
@@ -120,6 +122,10 @@ export function buildChatPrompt(input: ChatPromptInput): string {
     lines.push(
       `【引用的图片】被引用的消息里有 ${input.quotedImages} 张图，跟在当前消息的图片后面一起给你了。`,
     );
+  }
+
+  if (input.mentioned && input.mentioned.length > 0) {
+    lines.push(`【本条消息 @ 了】${input.mentioned.join("、")}`);
   }
 
   const current =

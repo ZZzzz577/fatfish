@@ -62,6 +62,26 @@ const bot = new Bot({
   intents: ["GROUP_AND_C2C_EVENT", "PUBLIC_GUILD_MESSAGES"],
 });
 
+interface RawMention {
+  username?: unknown;
+  is_you?: unknown;
+}
+
+/** 取出这条消息 @ 了谁，去掉机器人自己，去重 */
+function mentionedNames(mentions: unknown): string[] {
+  if (!Array.isArray(mentions)) return [];
+  const names: string[] = [];
+  for (const item of mentions) {
+    if (!item || typeof item !== "object") continue;
+    const mention = item as RawMention;
+    if (mention.is_you === true) continue;
+    if (typeof mention.username === "string" && mention.username.trim()) {
+      names.push(mention.username.trim());
+    }
+  }
+  return [...new Set(names)];
+}
+
 /**
  * 引用回复时平台会把被引用的消息放在 msg_elements 里，
  * SDK 没有解析这个字段，这里从原始 payload 取出来。
@@ -90,6 +110,7 @@ function handleGroup(event: GroupMessageEvent): void {
     })),
     addressed,
     quoted: quotedOf(event),
+    mentioned: mentionedNames(mentions),
     reply: (text) => event.reply(text),
   });
 }
@@ -105,6 +126,7 @@ function handlePrivate(event: PrivateMessageEvent): void {
     mentions: [],
     addressed: true,
     quoted: quotedOf(event),
+    mentioned: mentionedNames((event as unknown as { mentions?: unknown }).mentions),
     reply: (text) => event.reply(text),
   });
 }
@@ -124,6 +146,7 @@ function handleGuild(event: GuildMessageEvent): void {
     mentions: [],
     addressed: true,
     quoted: quotedOf(event),
+    mentioned: mentionedNames((event as unknown as { mentions?: unknown }).mentions),
     reply: (text) => event.reply(text),
   });
 }

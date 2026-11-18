@@ -74,6 +74,14 @@ describe("createChatHandler", () => {
     expect(prompts[0] ?? "").toContain("【触发方式】对方没有 @ 你");
   });
 
+  test("把 @ 的人传进提示词", async () => {
+    const { chat, prompts, incoming } = setup();
+
+    await chat.handle(incoming("你看看", { addressed: true, mentioned: ["小明"] }));
+
+    expect(prompts[0] ?? "").toContain("【本条消息 @ 了】小明");
+  });
+
   test("引用消息的内容会带进提示词", async () => {
     const { chat, prompts, incoming } = setup();
 

@@ -28,6 +28,8 @@ export interface IncomingMessage {
   addressed: boolean;
   /** 平台随消息推过来的被引用内容（message_type=103 时） */
   quoted?: QuotedContent;
+  /** 这条消息 @ 了谁（不含机器人自己） */
+  mentioned?: readonly string[];
   reply: (text: string) => Promise<unknown>;
 }
 
@@ -147,6 +149,7 @@ export function createChatHandler(options: ChatHandlerOptions) {
       sender: incoming.userName || "群友",
       text,
       imageCount: parsed.images.length,
+      mentioned: incoming.mentioned,
       timezone,
       trigger,
     });
