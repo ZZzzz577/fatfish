@@ -1,23 +1,53 @@
 # fatfish
 
-To install dependencies:
+群聊里的 AI 鱼「大肥鱼」：QQ 官方机器人 + deepagents。
+
+## 现在会什么
+
+- **人设**：有来历、性格、口头禅和边界，像群友聊天，不像客服；被问是不是 AI 会承认。
+- **上下文**：每个群/私聊记住最近 `HISTORY_LIMIT` 条消息，知道谁在说话、刚才聊了什么；被引用的消息会自动带进上下文。
+- **图片/表情**：消息里的图片会作为图片输入给模型（模型或网关不支持视觉时自动降级为纯文本）；表情、语音、卡片会转成可读占位符。
+- **输出**：自动去掉 Markdown，超长回复按句子拆成多条发送（最多 4 条），发送失败有兜底话术。
+- **指令**：@ 它说「重置对话」清空当前会话记忆；说「帮助」看用法。
+- **稳定性**：同一条消息只回一次，同一会话内串行处理，回复顺序和上下文顺序一致；模型调用有超时。
+
+## 目录
+
+```text
+index.ts            入口：事件、去重、串行队列、指令、分段发送
+src/persona.ts      人设卡 + 聊天提示词拼接
+src/context.ts      进程内短期会话记忆
+src/message.ts      raw_message 解析、回复清洗、分段
+src/agent.ts        模型与 deep agent 配置、多模态调用
+```
+
+## 配置
+
+复制 `.env.example` 为 `.env` 并填写：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `APP_ID` / `APP_SECRET` | 无 | QQ 开放平台机器人凭证 |
+| `OPENAI_API_KEY` | 无 | 模型密钥 |
+| `OPENAI_BASE_URL` | 空 | OpenAI 兼容网关地址 |
+| `OPENAI_MODEL` | `gpt-4o-mini` | 模型名 |
+| `OPENAI_TEMPERATURE` | `0.7` | 越高越活泼 |
+| `OPENAI_TIMEOUT_MS` | `60000` | 单次模型调用超时 |
+| `HISTORY_LIMIT` | `20` | 每个会话保留的上下文条数 |
+| `REPLY_MAX_CHARS` | `600` | 单条回复字数上限 |
+| `TIMEZONE` | `Asia/Shanghai` | 提示词里用的时区 |
+
+## 运行
 
 ```bash
 bun install
+bun run index.ts   # 启动机器人
+bun test           # 跑单元测试
+bun check          # 类型检查
 ```
 
-To run:
+## 已知限制
 
-```bash
-bun run index.ts
-```
-
-To type check:
-
-```bash
-bun check
-```
-
-Run `bun fmt` to format the code.
-
-This project was created using `bun init` in bun v1.4.4. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+- 记忆只存在进程内存里，重启即清空，多实例之间不共享。
+- QQ 官方群机器人只能收到 @ 它的消息，群聊上下文天然稀疏；频道消息可以收到全量。
+- 图片理解依赖所选模型和网关是否支持视觉输入。
