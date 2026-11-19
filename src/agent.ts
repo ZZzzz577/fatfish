@@ -1,6 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { createDeepAgent } from "deepagents";
 import { SYSTEM_PROMPT } from "./persona";
+import { webTools } from "./web";
 
 const apiKey = Bun.env.OPENAI_API_KEY;
 if (!apiKey) {
@@ -22,6 +23,7 @@ const model = new ChatOpenAI({
 export const agent = createDeepAgent({
   model,
   systemPrompt: SYSTEM_PROMPT,
+  tools: webTools,
 });
 
 type ContentBlock =
