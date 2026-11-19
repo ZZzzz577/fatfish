@@ -3,7 +3,8 @@ import { createChatHandler } from "./chat";
 import type { IncomingMessage } from "./chat";
 import { ConversationStore } from "./context";
 
-function setup() {
+function setup(options: { followUpMs?: number } = {}) {
+  let clock = Date.now();
   const history = new ConversationStore(20);
   const replies: string[] = [];
   const prompts: string[] = [];
@@ -20,6 +21,8 @@ function setup() {
     maxReplyChars: 600,
     timezone: "Asia/Shanghai",
     sleep: async () => {},
+    followUpMs: options.followUpMs ?? 90_000,
+    now: () => clock,
   });
 
   function incoming(
@@ -43,7 +46,17 @@ function setup() {
     };
   }
 
-  return { chat, history, replies, prompts, imagesSeen, incoming };
+  return {
+    chat,
+    history,
+    replies,
+    prompts,
+    imagesSeen,
+    incoming,
+    advance(ms: number) {
+      clock += ms;
+    },
+  };
 }
 
 describe("createChatHandler", () => {
@@ -72,6 +85,46 @@ describe("createChatHandler", () => {
 
     expect(replies).toEqual(["在的，刚摆了下尾巴。"]);
     expect(prompts[0] ?? "").toContain("【触发方式】对方没有 @ 你");
+  });
+
+  test("刚被叫到后，没点名的追问也会回", async () => {
+    const { chat, prompts, incoming } = setup();
+
+    await chat.handle(incoming("大肥鱼", { messageId: "m1" }));
+    await chat.handle(incoming("今天心情怎么样", { messageId: "m2" }));
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1] ?? "").toContain("【触发方式】上一句你们还在聊");
+  });
+
+  test("窗口内但不是问题就不插嘴", async () => {
+    const { chat, replies, incoming } = setup();
+
+    await chat.handle(incoming("大肥鱼", { messageId: "m1" }));
+    await chat.handle(incoming("哈哈哈", { messageId: "m2" }));
+
+    expect(replies).toHaveLength(1);
+  });
+
+  test("窗口内 @ 别人时不插嘴", async () => {
+    const { chat, replies, incoming } = setup();
+
+    await chat.handle(incoming("大肥鱼", { messageId: "m1" }));
+    await chat.handle(
+      incoming("你觉得呢", { messageId: "m2", mentioned: ["小明"] }),
+    );
+
+    expect(replies).toHaveLength(1);
+  });
+
+  test("超过窗口就不再主动接", async () => {
+    const { chat, replies, incoming, advance } = setup();
+
+    await chat.handle(incoming("大肥鱼", { messageId: "m1" }));
+    advance(91_000);
+    await chat.handle(incoming("今天心情怎么样", { messageId: "m2" }));
+
+    expect(replies).toHaveLength(1);
   });
 
   test("把 @ 的人传进提示词", async () => {

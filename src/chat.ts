@@ -41,6 +41,9 @@ export interface ChatHandlerOptions {
   timezone: string;
   fallbacks?: readonly string[];
   sleep?: (ms: number) => Promise<void>;
+  /** 被叫到之后的对话窗口时长，窗口内的提问会当作在问它；0 表示关闭 */
+  followUpMs?: number;
+  now?: () => number;
 }
 
 /** 从发送结果里取平台消息 id，方便别人引用机器人的话时能回溯 */
@@ -56,6 +59,11 @@ export function createChatHandler(options: ChatHandlerOptions) {
   const { history, generate, wakeWords, maxReplyChars, timezone } = options;
   const fallbacks = options.fallbacks ?? DEFAULT_FALLBACKS;
   const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const followUpMs = options.followUpMs ?? 90_000;
+  const now = options.now ?? Date.now;
+
+  // 每个群/私聊最近一次“它在对话”的时间，用于判断没点名的追问
+  const activeUntil = new Map<string, number>();
 
   const seenMessageIds = new Set<string>();
   const queues = new Map<string, Promise<void>>();
@@ -102,17 +110,33 @@ export function createChatHandler(options: ChatHandlerOptions) {
 
     const wakeWord = findWakeWord(text, wakeWords);
     const quotedBot = storedQuote?.self === true;
-    const shouldReply = incoming.addressed || quotedBot || wakeWord !== undefined;
-    const trigger: "at" | "name" | "quote" = quotedBot
+    const currentTime = now();
+    const inFollowUpWindow = currentTime < (activeUntil.get(incoming.key) ?? 0);
+    const followUp =
+      !incoming.addressed &&
+      !quotedBot &&
+      wakeWord === undefined &&
+      inFollowUpWindow &&
+      (incoming.mentioned?.length ?? 0) === 0 &&
+      !(storedQuote && !storedQuote.self) &&
+      looksLikeQuestion(text);
+
+    const shouldReply = incoming.addressed || quotedBot || wakeWord !== undefined || followUp;
+    const trigger: "at" | "name" | "quote" | "followup" = quotedBot
       ? "quote"
       : wakeWord !== undefined && !incoming.addressed
         ? "name"
-        : "at";
+        : followUp
+          ? "followup"
+          : "at";
+
+    if (shouldReply) activeUntil.set(incoming.key, currentTime + followUpMs);
 
     const commandText = stripWakeWords(text, wakeWords);
 
     if (shouldReply && isResetCommand(commandText)) {
       history.clear(incoming.key);
+      activeUntil.delete(incoming.key);
       await safeReply(incoming, "好，刚才聊的我全忘了，重新开始。");
       return;
     }
@@ -251,4 +275,15 @@ function collectRecentImages(
     }
   }
   return images;
+}
+
+/** 粗略判断一条消息像不像在问问题/跟人说话，用来识别没点名的追问 */
+export function looksLikeQuestion(text: string): boolean {
+  const value = text.trim();
+  if (!value) return false;
+  if (/[?？]\s*$/.test(value)) return true;
+  if (/^(你|您|大肥鱼|肥鱼)/.test(value)) return true;
+  return /(吗|呢|怎么|什么|为什么|为啥|咋|哪|谁|多少|如何|能不能|可不可以|是不是|要不要|好不好|行不行|对不对|有没有|会不会|在吗)/.test(
+    value,
+  );
 }

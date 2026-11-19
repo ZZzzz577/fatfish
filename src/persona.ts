@@ -52,8 +52,8 @@ export interface ChatPromptInput {
   /** 最近聊天里带过来的图片数量 */
   recentImages?: number;
   timezone?: string;
-  /** 这条消息是怎么叫到你的：@、被提到名字、还是引用了你的话 */
-  trigger?: "at" | "name" | "quote";
+  /** 这条消息是怎么叫到你的：@、被提到名字、引用了你的话，还是没点名的追问 */
+  trigger?: "at" | "name" | "quote" | "followup";
 }
 
 function formatTime(date: Date, timezone: string): string {
@@ -155,6 +155,10 @@ export function buildChatPrompt(input: ChatPromptInput): string {
     );
   } else if (input.trigger === "quote") {
     lines.push("【触发方式】对方引用了你说过的话，接着上面的话题回。");
+  } else if (input.trigger === "followup") {
+    lines.push(
+      "【触发方式】上一句你们还在聊，这条没有点名，但顺着上下文像是在接着问你。像平常聊天一样接一句；如果明显是在跟别人说话，就轻轻带过。",
+    );
   }
 
   lines.push(

@@ -38,6 +38,7 @@ function resolveTimezone(value: string | undefined): string {
 const timezone = resolveTimezone(Bun.env.TIMEZONE);
 const historyLimit = positiveInt(Bun.env.HISTORY_LIMIT, 20);
 const maxReplyChars = positiveInt(Bun.env.REPLY_MAX_CHARS, 600);
+const followUpMs = positiveInt(Bun.env.FOLLOW_UP_MS, 90_000);
 
 const DEFAULT_WAKE_WORDS = "大肥鱼,肥鱼,胖鱼,肥鱼鱼,fatfish";
 const wakeWords = (Bun.env.WAKE_WORDS ?? DEFAULT_WAKE_WORDS)
@@ -51,6 +52,7 @@ const chat = createChatHandler({
   wakeWords,
   maxReplyChars,
   timezone,
+  followUpMs,
 });
 
 const bot = new Bot({
@@ -161,7 +163,7 @@ bot.on("error", (err) => {
 
 await bot.start();
 console.log(
-  `机器人已启动（时区 ${timezone}，记忆 ${historyLimit} 条，单条上限 ${maxReplyChars} 字，唤醒词 ${wakeWords.join("/") || "无"}）`,
+  `机器人已启动（时区 ${timezone}，记忆 ${historyLimit} 条，单条上限 ${maxReplyChars} 字，唤醒词 ${wakeWords.join("/") || "无"}，追问窗口 ${Math.round(followUpMs / 1000)}s）`,
 );
 
 const shutdown = async () => {
