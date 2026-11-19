@@ -3,6 +3,7 @@ import {
   cleanReply,
   extractQuotedContent,
   findWakeWord,
+  parseMemoryCommand,
   parseRawMessage,
   splitReply,
   stripWakeWords,
@@ -143,5 +144,28 @@ describe("extractQuotedContent", () => {
     expect(extractQuotedContent([])).toBeUndefined();
     expect(extractQuotedContent(undefined)).toBeUndefined();
     expect(extractQuotedContent([{ content: "  " }])).toBeUndefined();
+  });
+});
+
+describe("parseMemoryCommand", () => {
+  test("识别记住指令", () => {
+    expect(parseMemoryCommand("记住我喜欢吃鱼")).toEqual({
+      action: "remember",
+      content: "我喜欢吃鱼",
+    });
+    expect(parseMemoryCommand("帮我记住：周六开黑")).toEqual({
+      action: "remember",
+      content: "周六开黑",
+    });
+  });
+
+  test("「记住了吗」不算指令", () => {
+    expect(parseMemoryCommand("记住了吗")).toBeUndefined();
+    expect(parseMemoryCommand("记住啊")).toBeUndefined();
+  });
+
+  test("识别忘掉和查询", () => {
+    expect(parseMemoryCommand("忘掉吃鱼")).toEqual({ action: "forget", keyword: "吃鱼" });
+    expect(parseMemoryCommand("你记得什么")).toEqual({ action: "list" });
   });
 });

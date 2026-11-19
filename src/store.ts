@@ -23,12 +23,17 @@ const DEFAULT_KEEP = 500;
 export class HistoryStore {
   private readonly db: Database;
   private readonly keep: number;
+  private readonly memoryKeep: number;
   private readonly insert;
   private readonly prune;
   private readonly recentStmt;
   private readonly conversationStmt;
   private readonly searchStmt;
   private readonly clearStmt;
+  private readonly memoryInsert;
+  private readonly memoryPrune;
+  private readonly memoryList;
+  private readonly memoryDelete;
 
   constructor(
     path: string = Bun.env.HISTORY_DB || DEFAULT_PATH,
@@ -57,8 +62,19 @@ export class HistoryStore {
     this.db.run(
       "CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages (conversation, timestamp);",
     );
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS memories (
+        conversation TEXT NOT NULL,
+        content TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_name TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (conversation, content)
+      );
+    `);
 
     this.keep = keep;
+    this.memoryKeep = positiveInt(Bun.env.MEMORY_KEEP, 200);
     this.insert = this.db.query(`
       INSERT OR IGNORE INTO messages (conversation, id, user_id, user_name, text, images, timestamp, self)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
@@ -86,6 +102,24 @@ export class HistoryStore {
       ORDER BY timestamp DESC, rowid DESC LIMIT ?3
     `);
     this.clearStmt = this.db.query("DELETE FROM messages WHERE conversation = ?1");
+    this.memoryInsert = this.db.query(`
+      INSERT OR IGNORE INTO memories (conversation, content, user_id, user_name, created_at)
+      VALUES (?1, ?2, ?3, ?4, ?5)
+    `);
+    this.memoryPrune = this.db.query(`
+      DELETE FROM memories
+      WHERE conversation = ?1
+        AND rowid NOT IN (
+          SELECT rowid FROM memories WHERE conversation = ?1 ORDER BY created_at DESC, rowid DESC LIMIT ?2
+        )
+    `);
+    this.memoryList = this.db.query(`
+      SELECT content FROM memories WHERE conversation = ?1
+      ORDER BY created_at DESC, rowid DESC LIMIT ?2
+    `);
+    this.memoryDelete = this.db.query(`
+      DELETE FROM memories WHERE conversation = ?1 AND content LIKE ?2 ESCAPE '\\'
+    `);
   }
 
   append(conversation: string, message: StoredMessage): void {
@@ -123,6 +157,35 @@ export class HistoryStore {
 
   clear(conversation: string): void {
     this.clearStmt.run(conversation);
+  }
+
+  /** 长期记忆：同一条内容只存一次 */
+  remember(
+    conversation: string,
+    entry: { userId: string; userName: string; content: string },
+  ): "created" | "duplicate" {
+    const result = this.memoryInsert.run(
+      conversation,
+      entry.content,
+      entry.userId,
+      entry.userName,
+      Date.now(),
+    );
+    if (result.changes === 0) return "duplicate";
+    this.memoryPrune.run(conversation, this.memoryKeep);
+    return "created";
+  }
+
+  /** 按写入时间正序返回最近 limit 条记忆 */
+  memories(conversation: string, limit: number): string[] {
+    const rows = this.memoryList.all(conversation, limit) as { content: string }[];
+    return rows.reverse().map((row) => row.content);
+  }
+
+  /** 按关键字删记忆，返回删掉的条数 */
+  forget(conversation: string, keyword: string): number {
+    const escaped = keyword.replace(/[\\%_]/g, (char) => `\\${char}`);
+    return this.memoryDelete.run(conversation, `%${escaped}%`).changes;
   }
 
   close(): void {

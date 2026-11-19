@@ -40,6 +40,7 @@ const timezone = resolveTimezone(Bun.env.TIMEZONE);
 const historyLimit = positiveInt(Bun.env.HISTORY_LIMIT, 20);
 const maxReplyChars = positiveInt(Bun.env.REPLY_MAX_CHARS, 600);
 const followUpMs = positiveInt(Bun.env.FOLLOW_UP_MS, 90_000);
+const memoryLimit = positiveInt(Bun.env.MEMORY_LIMIT, 20);
 
 const DEFAULT_WAKE_WORDS = "大肥鱼,肥鱼,胖鱼,肥鱼鱼,fatfish";
 const wakeWords = (Bun.env.WAKE_WORDS ?? DEFAULT_WAKE_WORDS)
@@ -63,6 +64,8 @@ try {
   console.error("历史存储不可用，本次只用内存:", err);
 }
 
+const store = persisted;
+
 const chat = createChatHandler({
   history,
   generate: generateReply,
@@ -70,8 +73,15 @@ const chat = createChatHandler({
   maxReplyChars,
   timezone,
   followUpMs,
-  persist: (key, message) => persisted?.append(key, message),
-  persistClear: (key) => persisted?.clear(key),
+  persist: (key, message) => store?.append(key, message),
+  persistClear: (key) => store?.clear(key),
+  memory: store
+    ? {
+        remember: (key, entry) => store.remember(key, entry),
+        forget: (key, keyword) => store.forget(key, keyword),
+        list: (key) => store.memories(key, memoryLimit),
+      }
+    : undefined,
 });
 
 const bot = new Bot({

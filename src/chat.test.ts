@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createChatHandler } from "./chat";
-import type { IncomingMessage } from "./chat";
+import type { IncomingMessage, MemoryStore } from "./chat";
 import { ConversationStore } from "./context";
 import type { StoredMessage } from "./context";
 
@@ -9,6 +9,7 @@ function setup(
     followUpMs?: number;
     persist?: (key: string, message: StoredMessage) => void;
     persistClear?: (key: string) => void;
+    memory?: MemoryStore;
   } = {},
 ) {
   let clock = Date.now();
@@ -32,6 +33,7 @@ function setup(
     now: () => clock,
     persist: options.persist,
     persistClear: options.persistClear,
+    memory: options.memory,
   });
 
   function incoming(
@@ -236,6 +238,89 @@ describe("createChatHandler", () => {
 
     expect(replies[0]).toContain("全忘了");
     expect(history.recent("group:1")).toHaveLength(0);
+  });
+
+  test("说「记住」会写入长期记忆，且不用调模型", async () => {
+    const entries: string[] = [];
+    const memory: MemoryStore = {
+      remember: (_key, entry) => {
+        if (entries.includes(entry.content)) return "duplicate";
+        entries.push(entry.content);
+        return "created";
+      },
+      forget: (_key, keyword) => {
+        const before = entries.length;
+        for (let i = entries.length - 1; i >= 0; i -= 1) {
+          if (entries[i]?.includes(keyword)) entries.splice(i, 1);
+        }
+        return before - entries.length;
+      },
+      list: () => [...entries],
+    };
+    const { chat, replies, prompts, incoming } = setup({ memory });
+
+    await chat.handle(incoming("大肥鱼，记住我喜欢吃鱼", { messageId: "m1" }));
+
+    expect(entries).toEqual(["我喜欢吃鱼"]);
+    expect(replies[0]).toContain("记住了");
+    expect(prompts).toHaveLength(0);
+  });
+
+  test("重复记住同一件事会提示已经记过", async () => {
+    const entries: string[] = [];
+    const memory: MemoryStore = {
+      remember: (_key, entry) => {
+        if (entries.includes(entry.content)) return "duplicate";
+        entries.push(entry.content);
+        return "created";
+      },
+      forget: () => 0,
+      list: () => [...entries],
+    };
+    const { chat, replies, incoming } = setup({ memory });
+
+    await chat.handle(incoming("大肥鱼，记住我喜欢吃鱼", { messageId: "m1" }));
+    await chat.handle(incoming("大肥鱼，记住我喜欢吃鱼", { messageId: "m2" }));
+
+    expect(entries).toHaveLength(1);
+    expect(replies[1]).toContain("已经记过");
+  });
+
+  test("能查询和忘掉长期记忆", async () => {
+    const entries = ["喜欢吃鱼"];
+    const memory: MemoryStore = {
+      remember: () => "created",
+      forget: (_key, keyword) => {
+        const before = entries.length;
+        for (let i = entries.length - 1; i >= 0; i -= 1) {
+          if (entries[i]?.includes(keyword)) entries.splice(i, 1);
+        }
+        return before - entries.length;
+      },
+      list: () => [...entries],
+    };
+    const { chat, replies, incoming } = setup({ memory });
+
+    await chat.handle(incoming("大肥鱼，你记得什么", { messageId: "m1" }));
+    expect(replies[0]).toContain("喜欢吃鱼");
+
+    await chat.handle(incoming("大肥鱼，忘掉吃鱼", { messageId: "m2" }));
+    expect(replies[1]).toContain("忘掉了 1 条");
+  });
+
+  test("长期记忆会进入正常回复的提示词", async () => {
+    const entries = ["小明说过：喜欢吃鱼"];
+    const memory: MemoryStore = {
+      remember: () => "created",
+      forget: () => 0,
+      list: () => [...entries],
+    };
+    const { chat, prompts, incoming } = setup({ memory });
+
+    await chat.handle(incoming("在吗", { addressed: true, messageId: "m1" }));
+
+    expect(prompts[0] ?? "").toContain("【长期记忆】");
+    expect(prompts[0] ?? "").toContain("喜欢吃鱼");
   });
 
   test("消息和回复都会写进持久化存储，重置时清掉", async () => {

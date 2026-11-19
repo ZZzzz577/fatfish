@@ -42,6 +42,8 @@ export interface QuotedMessage {
 export interface ChatPromptInput {
   scene: ChatScene;
   transcript: readonly StoredMessage[];
+  /** 长期记忆，来自用户明确让记住的内容 */
+  memories?: readonly string[];
   quote?: QuotedMessage;
   quotedImages?: number;
   sender: string;
@@ -104,8 +106,15 @@ export function buildChatPrompt(input: ChatPromptInput): string {
   const lines: string[] = [
     `【当前时间】${formatTime(now, timezone)}（${timezone}）`,
     `【聊天场景】${describeScene(input.scene)}`,
-    "【最近聊天】",
   ];
+
+  if (input.memories && input.memories.length > 0) {
+    lines.push("【长期记忆】");
+    for (const memory of input.memories) lines.push(`- ${memory}`);
+    lines.push("（这些是你之前记住的事，回答时可以参考，不要主动一条条复述。）");
+  }
+
+  lines.push("【最近聊天】");
 
   if (input.transcript.length === 0) {
     lines.push("（还没有聊天记录）");

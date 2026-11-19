@@ -234,3 +234,37 @@ export function splitReply(input: string, maxLength = 600): string[] {
 
   return chunks;
 }
+
+export type MemoryCommand =
+  | { action: "remember"; content: string }
+  | { action: "forget"; keyword: string }
+  | { action: "list" };
+
+const REMEMBER_PATTERN = /^(?:帮我|请)?(?:记住|记一下|记下|别忘了)[：:，,\s]*([\s\S]+)$/;
+const FORGET_PATTERN = /^(?:忘掉|忘记|删掉记忆|删除记忆|清掉记忆)[：:，,\s]*([\s\S]*)$/;
+const LIST_PATTERN = /^(?:你记得什么|你记住了什么|你记得啥|记忆列表|看看记忆|你有哪些记忆)$/;
+
+/** 识别“记住… / 忘掉… / 你记得什么”这类长期记忆指令 */
+export function parseMemoryCommand(text: string): MemoryCommand | undefined {
+  const value = text.trim();
+  if (!value) return undefined;
+
+  if (LIST_PATTERN.test(value)) return { action: "list" };
+
+  const forget = value.match(FORGET_PATTERN);
+  if (forget) {
+    const keyword = (forget[1] ?? "").trim();
+    return keyword ? { action: "forget", keyword } : undefined;
+  }
+
+  const remember = value.match(REMEMBER_PATTERN);
+  if (remember) {
+    const content = (remember[1] ?? "").trim();
+    if (content.length < 2) return undefined;
+    // “记住了吗”“记住啊”这种不是指令
+    if (/^[了吗嘛呢吧啊呀]/.test(content)) return undefined;
+    return { action: "remember", content: content.slice(0, 500) };
+  }
+
+  return undefined;
+}

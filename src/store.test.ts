@@ -65,3 +65,30 @@ describe("HistoryStore", () => {
     expect(store.recent("group:1", 10)[0]?.images).toEqual(["https://example.com/a.jpg"]);
   });
 });
+
+describe("长期记忆", () => {
+  test("能存、去重、列出、按关键字删除", () => {
+    const store = new HistoryStore(":memory:", 10);
+
+    expect(store.remember("group:1", { userId: "u1", userName: "小明", content: "喜欢吃鱼" })).toBe(
+      "created",
+    );
+    expect(store.remember("group:1", { userId: "u1", userName: "小明", content: "喜欢吃鱼" })).toBe(
+      "duplicate",
+    );
+    store.remember("group:1", { userId: "u2", userName: "小红", content: "周六开黑" });
+
+    expect(store.memories("group:1", 10)).toEqual(["喜欢吃鱼", "周六开黑"]);
+    expect(store.forget("group:1", "吃鱼")).toBe(1);
+    expect(store.memories("group:1", 10)).toEqual(["周六开黑"]);
+  });
+
+  test("不同会话的记忆互相隔离", () => {
+    const store = new HistoryStore(":memory:", 10);
+    store.remember("group:1", { userId: "u1", userName: "小明", content: "A" });
+    store.remember("group:2", { userId: "u1", userName: "小明", content: "B" });
+
+    expect(store.memories("group:1", 10)).toEqual(["A"]);
+    expect(store.memories("group:2", 10)).toEqual(["B"]);
+  });
+});

@@ -68,6 +68,21 @@ describe("buildChatPrompt", () => {
     expect(prompt).toContain("本次消息带了 2 张图");
   });
 
+  test("把长期记忆放进提示词", () => {
+    const prompt = buildChatPrompt({
+      scene: { kind: "group", name: "群" },
+      transcript: [],
+      sender: "小李",
+      text: "在吗",
+      imageCount: 0,
+      memories: ["小明说过：喜欢吃鱼"],
+      timezone: "Asia/Shanghai",
+    });
+
+    expect(prompt).toContain("【长期记忆】");
+    expect(prompt).toContain("- 小明说过：喜欢吃鱼");
+  });
+
   test("列出本条消息 @ 了谁", () => {
     const prompt = buildChatPrompt({
       scene: { kind: "group", name: "群" },

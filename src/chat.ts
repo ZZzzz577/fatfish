@@ -2,6 +2,7 @@ import type { ConversationStore, StoredMessage } from "./context";
 import {
   cleanReply,
   findWakeWord,
+  parseMemoryCommand,
   parseRawMessage,
   splitReply,
   stripWakeWords,
@@ -33,6 +34,15 @@ export interface IncomingMessage {
   reply: (text: string) => Promise<unknown>;
 }
 
+export interface MemoryStore {
+  remember(
+    key: string,
+    entry: { userId: string; userName: string; content: string },
+  ): "created" | "duplicate";
+  forget(key: string, keyword: string): number;
+  list(key: string): string[];
+}
+
 export interface ChatHandlerOptions {
   history: ConversationStore;
   generate: (input: { prompt: string; images: readonly string[] }) => Promise<string>;
@@ -48,6 +58,8 @@ export interface ChatHandlerOptions {
   persist?: (key: string, message: StoredMessage) => void;
   /** 清空某个会话的持久化历史（可选） */
   persistClear?: (key: string) => void;
+  /** 长期记忆（可选） */
+  memory?: MemoryStore;
 }
 
 /** 从发送结果里取平台消息 id，方便别人引用机器人的话时能回溯 */
@@ -102,6 +114,47 @@ export function createChatHandler(options: ChatHandlerOptions) {
     } catch (err) {
       console.error("发送消息失败:", err);
     }
+  }
+
+  async function handleMemoryCommand(
+    incoming: IncomingMessage,
+    command: { action: "remember"; content: string } | { action: "forget"; keyword: string } | { action: "list" },
+  ): Promise<void> {
+    const memory = options.memory;
+    if (!memory) {
+      await safeReply(incoming, "我现在还记不住东西，等记忆功能恢复再说。");
+      return;
+    }
+
+    if (command.action === "remember") {
+      const result = memory.remember(incoming.key, {
+        userId: incoming.userId,
+        userName: incoming.userName || "群友",
+        content: command.content,
+      });
+      await safeReply(
+        incoming,
+        result === "duplicate" ? "这条我已经记过了。" : `记住了：${command.content}`,
+      );
+      return;
+    }
+
+    if (command.action === "forget") {
+      const count = memory.forget(incoming.key, command.keyword);
+      await safeReply(
+        incoming,
+        count > 0 ? `忘掉了 ${count} 条相关的记忆。` : "没找到相关的记忆。",
+      );
+      return;
+    }
+
+    const entries = memory.list(incoming.key);
+    await safeReply(
+      incoming,
+      entries.length > 0
+        ? `我记得这些：\n${entries.map((entry, index) => `${index + 1}. ${entry}`).join("\n")}`
+        : "我还没记住什么。",
+    );
   }
 
   async function processMessage(incoming: IncomingMessage): Promise<void> {
@@ -164,6 +217,12 @@ export function createChatHandler(options: ChatHandlerOptions) {
       return;
     }
 
+    const memoryCommand = shouldReply ? parseMemoryCommand(commandText) : undefined;
+    if (memoryCommand) {
+      await handleMemoryCommand(incoming, memoryCommand);
+      return;
+    }
+
     // 纯空消息（比如只 @ 了一下）给个回应，别装死
     if (
       !text &&
@@ -190,9 +249,12 @@ export function createChatHandler(options: ChatHandlerOptions) {
     // 没叫到它：只当听众，不插嘴
     if (!shouldReply) return;
 
+    const memories = options.memory?.list(incoming.key) ?? [];
+
     const prompt = buildChatPrompt({
       scene: incoming.scene,
       transcript,
+      memories,
       quote,
       quotedImages: quotedImages.length,
       sender: incoming.userName || "群友",
@@ -266,7 +328,7 @@ export function createChatHandler(options: ChatHandlerOptions) {
 }
 
 const HELP_TEXT =
-  "我是大肥鱼，群里的 AI 鱼。@ 我或者直接喊「大肥鱼」都行；想让我忘掉刚才的对话，说「重置对话」。";
+  "我是大肥鱼，群里的 AI 鱼。@ 我或者直接喊「大肥鱼」都行。想让我长期记住什么，说「记住…」；想删掉说「忘掉…」；想知道我记了什么，问「你记得什么」。想清空聊天上下文，说「重置对话」。";
 
 function isResetCommand(text: string): boolean {
   return /^(\/reset|重置对话|清空记忆|忘掉刚才)$/i.test(text.trim());
