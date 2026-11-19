@@ -1,4 +1,4 @@
-import type { ConversationStore } from "./context";
+import type { ConversationStore, StoredMessage } from "./context";
 import {
   cleanReply,
   findWakeWord,
@@ -94,6 +94,12 @@ export function createChatHandler(options: ChatHandlerOptions) {
       storedQuote ?? (incoming.quoted?.text ? { text: incoming.quoted.text } : undefined);
     const transcript = [...history.recent(incoming.key)];
 
+    // 图片单独发、下一句才 @ 它问“这图啥意思”时，把最近那张图也带上
+    const recentImages =
+      parsed.images.length === 0 && quotedImages.length === 0
+        ? collectRecentImages(transcript, 5 * 60_000, 1)
+        : [];
+
     const wakeWord = findWakeWord(text, wakeWords);
     const quotedBot = storedQuote?.self === true;
     const shouldReply = incoming.addressed || quotedBot || wakeWord !== undefined;
@@ -134,6 +140,7 @@ export function createChatHandler(options: ChatHandlerOptions) {
       userId: incoming.userId,
       userName: incoming.userName,
       text: text || "【图片】",
+      images: parsed.images.length > 0 ? [...parsed.images] : undefined,
       timestamp: Date.now(),
       self: false,
     });
@@ -149,13 +156,19 @@ export function createChatHandler(options: ChatHandlerOptions) {
       sender: incoming.userName || "群友",
       text,
       imageCount: parsed.images.length,
+      recentImages: recentImages.length,
       mentioned: incoming.mentioned,
       timezone,
       trigger,
     });
 
-    // 当前消息的图在前，引用消息的图在后，总共不超过 4 张
-    const images = [...parsed.images, ...quotedImages].slice(0, 4);
+    // 当前消息的图在前，引用消息的图其次，最近聊天的图最后，总共不超过 4 张
+    const images = [...new Set([...parsed.images, ...quotedImages, ...recentImages])].slice(0, 4);
+    if (images.length > 0) {
+      console.log(
+        `图片输入：当前 ${parsed.images.length}，引用 ${quotedImages.length}，最近 ${recentImages.length}`,
+      );
+    }
 
     let answer: string;
     try {
@@ -219,4 +232,23 @@ function isResetCommand(text: string): boolean {
 
 function isHelpCommand(text: string): boolean {
   return /^(\/help|help|帮助)$/i.test(text.trim());
+}
+
+/** 从最近聊天里捞图片，只取时间窗内的，最多 limit 张 */
+function collectRecentImages(
+  transcript: readonly StoredMessage[],
+  maxAgeMs: number,
+  limit: number,
+): string[] {
+  const cutoff = Date.now() - maxAgeMs;
+  const images: string[] = [];
+  for (let i = transcript.length - 1; i >= 0 && images.length < limit; i -= 1) {
+    const message = transcript[i];
+    if (!message || message.self || message.timestamp < cutoff) continue;
+    for (const url of message.images ?? []) {
+      if (!images.includes(url)) images.push(url);
+      if (images.length >= limit) break;
+    }
+  }
+  return images;
 }

@@ -82,6 +82,41 @@ describe("createChatHandler", () => {
     expect(prompts[0] ?? "").toContain("【本条消息 @ 了】小明");
   });
 
+  test("图片单独发、下一句再问，也能看到那张图", async () => {
+    const { chat, history, prompts, imagesSeen, incoming } = setup();
+    history.add("group:1", {
+      id: "img1",
+      userId: "u1",
+      userName: "小明",
+      text: "【图片】",
+      images: ["https://example.com/pic.jpg"],
+      timestamp: Date.now() - 30_000,
+      self: false,
+    });
+
+    await chat.handle(incoming("这张图啥意思", { addressed: true }));
+
+    expect(imagesSeen[0]).toEqual(["https://example.com/pic.jpg"]);
+    expect(prompts[0] ?? "").toContain("【最近的图片】");
+  });
+
+  test("图片太旧就不带了", async () => {
+    const { chat, history, imagesSeen, incoming } = setup();
+    history.add("group:1", {
+      id: "img1",
+      userId: "u1",
+      userName: "小明",
+      text: "【图片】",
+      images: ["https://example.com/pic.jpg"],
+      timestamp: Date.now() - 10 * 60_000,
+      self: false,
+    });
+
+    await chat.handle(incoming("这张图啥意思", { addressed: true }));
+
+    expect(imagesSeen[0]).toEqual([]);
+  });
+
   test("引用消息的内容会带进提示词", async () => {
     const { chat, prompts, incoming } = setup();
 

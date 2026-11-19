@@ -4,6 +4,8 @@ export interface StoredMessage {
   userId: string;
   userName: string;
   text: string;
+  /** 这条消息附带的图片地址 */
+  images?: string[];
   timestamp: number;
   /** 是否为机器人自己说的话 */
   self: boolean;
