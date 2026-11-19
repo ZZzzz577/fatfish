@@ -8,6 +8,7 @@ import { generateReply } from "./src/agent";
 import { createChatHandler } from "./src/chat";
 import { ConversationStore } from "./src/context";
 import { extractQuotedContent } from "./src/message";
+import { HistoryStore } from "./src/store";
 
 const appid = Bun.env.APP_ID;
 const secret = Bun.env.APP_SECRET;
@@ -46,13 +47,31 @@ const wakeWords = (Bun.env.WAKE_WORDS ?? DEFAULT_WAKE_WORDS)
   .map((word) => word.trim())
   .filter(Boolean);
 
+const history = new ConversationStore(historyLimit);
+let persisted: HistoryStore | undefined;
+
+try {
+  persisted = new HistoryStore();
+  const keys = persisted.conversations(500);
+  for (const key of keys) {
+    for (const message of persisted.recent(key, historyLimit)) {
+      history.add(key, message);
+    }
+  }
+  console.log(`已从本地恢复 ${keys.length} 个会话的历史`);
+} catch (err) {
+  console.error("历史存储不可用，本次只用内存:", err);
+}
+
 const chat = createChatHandler({
-  history: new ConversationStore(historyLimit),
+  history,
   generate: generateReply,
   wakeWords,
   maxReplyChars,
   timezone,
   followUpMs,
+  persist: (key, message) => persisted?.append(key, message),
+  persistClear: (key) => persisted?.clear(key),
 });
 
 const bot = new Bot({
@@ -168,6 +187,7 @@ console.log(
 
 const shutdown = async () => {
   await bot.stop();
+  persisted?.close();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);

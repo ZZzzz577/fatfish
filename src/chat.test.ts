@@ -2,8 +2,15 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { createChatHandler } from "./chat";
 import type { IncomingMessage } from "./chat";
 import { ConversationStore } from "./context";
+import type { StoredMessage } from "./context";
 
-function setup(options: { followUpMs?: number } = {}) {
+function setup(
+  options: {
+    followUpMs?: number;
+    persist?: (key: string, message: StoredMessage) => void;
+    persistClear?: (key: string) => void;
+  } = {},
+) {
   let clock = Date.now();
   const history = new ConversationStore(20);
   const replies: string[] = [];
@@ -23,6 +30,8 @@ function setup(options: { followUpMs?: number } = {}) {
     sleep: async () => {},
     followUpMs: options.followUpMs ?? 90_000,
     now: () => clock,
+    persist: options.persist,
+    persistClear: options.persistClear,
   });
 
   function incoming(
@@ -227,6 +236,23 @@ describe("createChatHandler", () => {
 
     expect(replies[0]).toContain("全忘了");
     expect(history.recent("group:1")).toHaveLength(0);
+  });
+
+  test("消息和回复都会写进持久化存储，重置时清掉", async () => {
+    const saved: StoredMessage[] = [];
+    const cleared: string[] = [];
+    const { chat, incoming } = setup({
+      persist: (_key, message) => saved.push(message),
+      persistClear: (key) => cleared.push(key),
+    });
+
+    await chat.handle(incoming("大肥鱼在吗", { messageId: "m1" }));
+
+    expect(saved.map((message) => message.text)).toEqual(["大肥鱼在吗", "在的，刚摆了下尾巴。"]);
+
+    await chat.handle(incoming("大肥鱼，重置对话", { messageId: "m2" }));
+
+    expect(cleared).toEqual(["group:1"]);
   });
 
   test("同一条消息只处理一次", async () => {

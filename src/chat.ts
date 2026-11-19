@@ -44,6 +44,10 @@ export interface ChatHandlerOptions {
   /** 被叫到之后的对话窗口时长，窗口内的提问会当作在问它；0 表示关闭 */
   followUpMs?: number;
   now?: () => number;
+  /** 把消息写入持久化存储（可选） */
+  persist?: (key: string, message: StoredMessage) => void;
+  /** 清空某个会话的持久化历史（可选） */
+  persistClear?: (key: string) => void;
 }
 
 /** 从发送结果里取平台消息 id，方便别人引用机器人的话时能回溯 */
@@ -61,6 +65,15 @@ export function createChatHandler(options: ChatHandlerOptions) {
   const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
   const followUpMs = options.followUpMs ?? 90_000;
   const now = options.now ?? Date.now;
+
+  function record(key: string, message: StoredMessage): void {
+    history.add(key, message);
+    try {
+      options.persist?.(key, message);
+    } catch (err) {
+      console.error("写入历史记录失败:", err);
+    }
+  }
 
   // 每个群/私聊最近一次“它在对话”的时间，用于判断没点名的追问
   const activeUntil = new Map<string, number>();
@@ -137,6 +150,11 @@ export function createChatHandler(options: ChatHandlerOptions) {
     if (shouldReply && isResetCommand(commandText)) {
       history.clear(incoming.key);
       activeUntil.delete(incoming.key);
+      try {
+        options.persistClear?.(incoming.key);
+      } catch (err) {
+        console.error("清空历史记录失败:", err);
+      }
       await safeReply(incoming, "好，刚才聊的我全忘了，重新开始。");
       return;
     }
@@ -159,7 +177,7 @@ export function createChatHandler(options: ChatHandlerOptions) {
     }
 
     // 不管回不回，先把消息记进上下文，之后接话才接得上
-    history.add(incoming.key, {
+    record(incoming.key, {
       id: incoming.messageId,
       userId: incoming.userId,
       userName: incoming.userName,
@@ -216,7 +234,7 @@ export function createChatHandler(options: ChatHandlerOptions) {
       if (index < chunks.length - 1) await sleep(250);
     }
 
-    history.add(incoming.key, {
+    record(incoming.key, {
       id: replyId ?? `${incoming.messageId}:reply`,
       userId: "bot",
       userName: "大肥鱼",
