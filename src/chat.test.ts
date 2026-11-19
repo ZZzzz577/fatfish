@@ -266,6 +266,25 @@ describe("createChatHandler", () => {
     expect(prompts).toHaveLength(0);
   });
 
+  test("带 @ 的记忆指令会保留 @ 的人", async () => {
+    const entries: string[] = [];
+    const memory: MemoryStore = {
+      remember: (_key, entry) => {
+        entries.push(entry.content);
+        return "created";
+      },
+      forget: () => 0,
+      list: () => [...entries],
+    };
+    const { chat, incoming } = setup({ memory });
+
+    await chat.handle(
+      incoming("大肥鱼，你记住 xxx 是 <at,user_id=u1,username=小明>", { messageId: "m1" }),
+    );
+
+    expect(entries).toEqual(["xxx 是 @小明"]);
+  });
+
   test("重复记住同一件事会提示已经记过", async () => {
     const entries: string[] = [];
     const memory: MemoryStore = {

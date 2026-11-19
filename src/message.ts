@@ -80,9 +80,9 @@ export function parseRawMessage(raw: string, mentions: readonly Mention[] = []):
       if (userId === "all") {
         text += "@全体成员";
       } else {
-        const name = mentions.find(
-          (mention) => mention.id === userId || mention.memberId === userId,
-        )?.name;
+        const name =
+          mentions.find((mention) => mention.id === userId || mention.memberId === userId)?.name ??
+          attrs.username;
         text += `@${name ?? "某人"}`;
       }
       continue;
@@ -240,9 +240,10 @@ export type MemoryCommand =
   | { action: "forget"; keyword: string }
   | { action: "list" };
 
-const REMEMBER_PATTERN = /^(?:帮我|请)?(?:记住|记一下|记下|别忘了)[：:，,\s]*([\s\S]+)$/;
+const REMEMBER_PATTERN = /^(?:你|帮我|请)?(?:记住|记一下|记下|别忘了)[：:，,\s]*([\s\S]+)$/;
 const FORGET_PATTERN = /^(?:忘掉|忘记|删掉记忆|删除记忆|清掉记忆)[：:，,\s]*([\s\S]*)$/;
-const LIST_PATTERN = /^(?:你记得什么|你记住了什么|你记得啥|记忆列表|看看记忆|你有哪些记忆)$/;
+const LIST_PATTERN =
+  /^(?:你记得什么|你记住了什么|你记得啥|你记住什么|你记住啥|记忆列表|看看记忆|你有哪些记忆)$/;
 
 /** 识别“记住… / 忘掉… / 你记得什么”这类长期记忆指令 */
 export function parseMemoryCommand(text: string): MemoryCommand | undefined {
@@ -262,7 +263,7 @@ export function parseMemoryCommand(text: string): MemoryCommand | undefined {
     const content = (remember[1] ?? "").trim();
     if (content.length < 2) return undefined;
     // “记住了吗”“记住啊”这种不是指令
-    if (/^[了吗嘛呢吧啊呀]/.test(content)) return undefined;
+    if (/^[了吗嘛呢吧啊呀]+[?？]?$/.test(content)) return undefined;
     return { action: "remember", content: content.slice(0, 500) };
   }
 

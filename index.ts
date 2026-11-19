@@ -88,7 +88,8 @@ const bot = new Bot({
   appid,
   secret,
   mode: ReceiverMode.WEBSOCKET,
-  removeAt: true,
+  // 不要删正文里的 @ 标签，交给解析器换成 @名字；否则“记住 xxx 是 @小明”会丢人
+  removeAt: false,
   logLevel: "info",
   intents: ["GROUP_AND_C2C_EVENT", "PUBLIC_GUILD_MESSAGES"],
 });

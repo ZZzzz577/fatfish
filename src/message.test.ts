@@ -43,6 +43,12 @@ describe("parseRawMessage", () => {
     expect(parsed.images).toEqual([]);
   });
 
+test("mention 里没匹配到 id 时退回 username", () => {
+    const parsed = parseRawMessage("<at,user_id=uX,username=小明> 你好");
+
+    expect(parsed.text).toBe("@小明 你好");
+  });
+
   test("全量模式的 <@成员> 写法也能还原", () => {
     const parsed = parseRawMessage("<@A1B2> 你看 <@all> 和 <@!C3D4>", [
       { id: "u1", memberId: "A1B2", name: "小明" },
@@ -162,6 +168,15 @@ describe("parseMemoryCommand", () => {
   test("「记住了吗」不算指令", () => {
     expect(parseMemoryCommand("记住了吗")).toBeUndefined();
     expect(parseMemoryCommand("记住啊")).toBeUndefined();
+    expect(parseMemoryCommand("你记住了吗")).toBeUndefined();
+  });
+
+  test("「你记住…」也算指令", () => {
+    expect(parseMemoryCommand("你记住我喜欢吃鱼")).toEqual({
+      action: "remember",
+      content: "我喜欢吃鱼",
+    });
+    expect(parseMemoryCommand("你记住什么")).toEqual({ action: "list" });
   });
 
   test("识别忘掉和查询", () => {
